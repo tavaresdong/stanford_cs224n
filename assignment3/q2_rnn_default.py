@@ -249,41 +249,22 @@ class RNNModel(NERModel):
 
         x = self.add_embedding()
         dropout_rate = self.dropout_placeholder
-
         preds = [] # Predicted output at each timestep should go here!
-
-        # Use the cell defined below. For Q2, we will just be using the
-        # RNNCell you defined, but for Q3, we will run this code again
-        # with a GRU cell!
-        if self.config.cell == "rnn":
-            cell = RNNCell(Config.n_features * Config.embed_size, Config.hidden_size)
-        elif self.config.cell == "gru":
-            cell = GRUCell(Config.n_features * Config.embed_size, Config.hidden_size)
-        else:
-            raise ValueError("Unsuppported cell type: " + self.config.cell)
+        cell = tf.contrib.rnn.BasicRNNCell(num_units=Config.hidden_size)
 
         # Define U and b2 as variables.
         # Initialize state as vector of zeros.
-        ### YOUR CODE HERE (~4-6 lines)
         with tf.variable_scope("RNN"):
             self.U = tf.get_variable("U", shape=(self.config.hidden_size, self.config.n_classes), initializer=tf.contrib.layers.xavier_initializer())
             self.b2 = tf.get_variable("b_2", shape=(self.config.n_classes), initializer=tf.constant_initializer(0))
-            h = tf.zeros(shape=(1, self.config.hidden_size))
-        ### END YOUR CODE
 
-        with tf.variable_scope("RNN"):
-            for time_step in range(self.max_length):
-                ### YOUR CODE HERE (~6-10 lines)
-                if time_step != 0:
-                    tf.get_variable_scope().reuse_variables()
+        output, _ = tf.nn.dynamic_rnn(cell, x, dtype=tf.float32)
 
-                # retrive only this timestep' value as input
-                output, h = cell(x[:, time_step, :], h, scope="RNN")
-                #h_reshape = tf.reshape(h, shape=(1, self.config.hidden_size))
-                o_drop = tf.nn.dropout(output, keep_prob=dropout_rate)
-                z = tf.matmul(o_drop, self.U) + self.b2
-                preds.append(z)
-                #END YOUR CODE
+        list_outputs = tf.unstack(output, axis=1)
+        for o in list_outputs:
+            o_drop = tf.nn.dropout(o, keep_prob=dropout_rate)
+            z = tf.matmul(o_drop, self.U) + self.b2
+            preds.append(z)
 
         # Make sure to reshape @preds here.
         ### YOUR CODE HERE (~2-4 lines)
@@ -292,7 +273,6 @@ class RNNModel(NERModel):
         # stack will stack a list of tensor rank R to a new tensor of 
         # rank R+1
         preds = tf.stack(preds, axis=1)
-        ### END YOUR CODE
 
         assert preds.get_shape().as_list() == [None, self.max_length, self.config.n_classes], "predictions are not of the right shape. Expected {}, got {}".format([None, self.max_length, self.config.n_classes], preds.get_shape().as_list())
         return preds
